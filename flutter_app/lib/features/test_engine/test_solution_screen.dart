@@ -19,8 +19,9 @@ class _TestSolutionScreenState extends State<TestSolutionScreen> {
 
   final Map<int, dynamic> _userAnswers = {};
   
-  late Future<List<Map<String, dynamic>>> _questionsFuture;
   List<Map<String, dynamic>> _questions = [];
+  bool _isLoading = true;
+  String? _error;
 
   @override
   void initState() {
@@ -31,7 +32,26 @@ class _TestSolutionScreenState extends State<TestSolutionScreen> {
         _userAnswers[int.parse(key.toString())] = value;
       });
     }
-    _questionsFuture = _fetchQuestions();
+    _loadQuestions();
+  }
+
+  Future<void> _loadQuestions() async {
+    try {
+      final qs = await _fetchQuestions();
+      if (mounted) {
+        setState(() {
+          _questions = qs;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+          _isLoading = false;
+        });
+      }
+    }
   }
 
   Future<List<Map<String, dynamic>>> _fetchQuestions() async {
@@ -109,7 +129,7 @@ class _TestSolutionScreenState extends State<TestSolutionScreen> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    'Solution',
+                    _questions.isNotEmpty ? 'Solution - Q${_currentIndex + 1}' : 'Solution',
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: Theme.of(context).colorScheme.onSurface),
                   ),
                   IconButton(
@@ -188,16 +208,14 @@ class _TestSolutionScreenState extends State<TestSolutionScreen> {
             const Divider(),
             // Question Area
             Expanded(
-              child: FutureBuilder<List<Map<String, dynamic>>>(
-                future: _questionsFuture,
-                builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting) {
+              child: Builder(
+                builder: (context) {
+                  if (_isLoading) {
                     return const Center(child: CircularProgressIndicator());
                   }
-                  if (snapshot.hasError) {
-                    return Center(child: Text('Error: ${snapshot.error}'));
+                  if (_error != null) {
+                    return Center(child: Text('Error: $_error'));
                   }
-                  _questions = snapshot.data ?? [];
                   if (_questions.isEmpty) {
                     return const Center(child: Text('No questions found for this test.'));
                   }
@@ -364,13 +382,20 @@ class _TestSolutionScreenState extends State<TestSolutionScreen> {
                             const SizedBox(height: 24),
                             const Text('Solution:', style: TextStyle(fontWeight: FontWeight.bold)),
                             const SizedBox(height: 8),
-                            LatexText(
-                              text: question['solution'] ?? question['explanation'] ?? 'No solution provided.',
-                              style: TextStyle(
-                                fontSize: 14,
-                                color: Theme.of(context).colorScheme.onSurface,
-                                height: 1.5,
-                              ),
+                            Builder(
+                              builder: (context) {
+                                final String sol = question['solution']?.toString() ?? '';
+                                final String exp = question['explanation']?.toString() ?? '';
+                                final String displaySol = sol.isNotEmpty ? sol : (exp.isNotEmpty ? exp : 'No solution provided.');
+                                return LatexText(
+                                  text: displaySol,
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    color: Theme.of(context).colorScheme.onSurface,
+                                    height: 1.5,
+                                  ),
+                                );
+                              }
                             ),
                             if (question['solutionImageUrl'] != null && question['solutionImageUrl'].toString().startsWith('http'))
                                Padding(
@@ -410,15 +435,14 @@ class _TestSolutionScreenState extends State<TestSolutionScreen> {
                               alignment: Alignment.center,
                               child: Text('${index + 1}', style: TextStyle(color: _getQuestionColor(index), fontWeight: FontWeight.w600)),
                             ),
-                        );
-                      },
+                          );
+                        },
+                      ),
                     ),
-                  ),
-              ],
-            );
-          },
-        ),
-      ),
+                ],
+              );
+            }),
+          ),
       // Footer Navigation
       Container(
         padding: const EdgeInsets.all(16),

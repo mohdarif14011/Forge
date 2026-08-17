@@ -26,8 +26,9 @@ class _TestActiveScreenState extends State<TestActiveScreen> {
   final Map<int, bool> _markedForReview = {};
   final Set<int> _visitedQuestions = {0};
   
-  late Future<List<Map<String, dynamic>>> _questionsFuture;
   List<Map<String, dynamic>> _questions = [];
+  bool _isLoading = true;
+  String? _error;
   
   Timer? _timer;
   int _timeSpentSeconds = 0;
@@ -46,8 +47,27 @@ class _TestActiveScreenState extends State<TestActiveScreen> {
       });
     }
 
-    _questionsFuture = _fetchQuestions();
+    _loadQuestions();
     _startTimer();
+  }
+
+  Future<void> _loadQuestions() async {
+    try {
+      final qs = await _fetchQuestions();
+      if (mounted) {
+        setState(() {
+          _questions = qs;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+          _isLoading = false;
+        });
+      }
+    }
   }
 
   void _startTimer() {
@@ -512,16 +532,14 @@ class _TestActiveScreenState extends State<TestActiveScreen> {
             const Divider(),
               // Question Area
               Expanded(
-                child: FutureBuilder<List<Map<String, dynamic>>>(
-                  future: _questionsFuture,
-                  builder: (context, snapshot) {
-                    if (snapshot.connectionState == ConnectionState.waiting) {
+                child: Builder(
+                  builder: (context) {
+                    if (_isLoading) {
                       return const Center(child: CircularProgressIndicator());
                     }
-                    if (snapshot.hasError) {
-                      return Center(child: Text('Error: ${snapshot.error}'));
+                    if (_error != null) {
+                      return Center(child: Text('Error: $_error'));
                     }
-                    _questions = snapshot.data ?? [];
                     if (_questions.isEmpty) {
                       return const Center(child: Text('No questions found for this test.'));
                     }
@@ -756,8 +774,14 @@ class _TestActiveScreenState extends State<TestActiveScreen> {
                                     const SizedBox(height: 16),
                                     const Text('Solution:', style: TextStyle(fontWeight: FontWeight.bold)),
                                     const SizedBox(height: 8),
-                                    if (question['solution'] != null && question['solution'].toString().isNotEmpty)
-                                       LatexText(text: question['solution'], style: TextStyle(color: Theme.of(context).colorScheme.onSurface)),
+                                    Builder(
+                                      builder: (context) {
+                                        final String sol = question['solution']?.toString() ?? '';
+                                        final String exp = question['explanation']?.toString() ?? '';
+                                        final String displaySol = sol.isNotEmpty ? sol : (exp.isNotEmpty ? exp : 'No solution provided.');
+                                        return LatexText(text: displaySol, style: TextStyle(color: Theme.of(context).colorScheme.onSurface));
+                                      }
+                                    ),
                                     if (question['solutionImageUrl'] != null && question['solutionImageUrl'].toString().startsWith('http'))
                                        Padding(
                                          padding: const EdgeInsets.only(top: 8),
@@ -823,7 +847,7 @@ class _TestActiveScreenState extends State<TestActiveScreen> {
                     ),
                 ],
               );
-            },
+            }
           ),
         ),
         // Footer

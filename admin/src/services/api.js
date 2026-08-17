@@ -12,13 +12,33 @@ export const uploadImage = async (file) => {
     body: formData,
   });
   
+  const data = await response.json();
+  
   if (!response.ok) {
-    throw new Error('Failed to upload image');
+    throw new Error(data.detail || data.message || 'Failed to upload image');
   }
   
-  const data = await response.json();
   return data.url;
 };
+
+export const fixSolution = async (questionData) => {
+  const response = await fetch('http://localhost:8000/api/fix-solution', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(questionData),
+  });
+  
+  const data = await response.json();
+  
+  if (!response.ok) {
+    throw new Error(data.detail || data.message || 'Failed to fix solution');
+  }
+  
+  return data.solution;
+};
+
 
 // =======================
 // EXAM CONFIGS (Dynamic structure for Exams, Subjects, Chapters, Shifts, Years)

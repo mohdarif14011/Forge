@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Upload, Loader2, Save, Trash2, FileJson, Sparkles } from 'lucide-react';
-import { addQuestion, getExams, uploadImage } from '../services/api';
+import { addQuestion, getExams, uploadImage, fixSolution } from '../services/api';
 import 'katex/dist/katex.min.css';
 import katex from 'katex';
 
@@ -47,6 +47,7 @@ const UploadQuestions = () => {
   // AI Solution Generation State
   const [aiProgress, setAiProgress] = useState('');
   const [isExtracting, setIsExtracting] = useState(false);
+  const [fixingIdx, setFixingIdx] = useState(null);
 
   useEffect(() => {
     const fetchExamsData = async () => {
@@ -115,22 +116,20 @@ const UploadQuestions = () => {
                 } else if (q.options && typeof q.options === 'object') {
                   optionsArray = Object.values(q.options);
                 }
-                
                 let correctAnswer = q.correctAnswer ?? q.correct_option ?? q.answer ?? '';
                 if (q.options && !Array.isArray(q.options) && typeof q.options === 'object') {
-                   if (q.options[correctAnswer]) {
+                   if (q.options[correctAnswer] !== undefined) {
                      correctAnswer = q.options[correctAnswer];
                    }
                 }
-
-                const isInteger = optionsArray.length === 0;
                 return {
                   ...q,
                   options: optionsArray,
-                  correctAnswer: correctAnswer,
+                  correctAnswer: String(correctAnswer),
                   explanation: q.explanation || q.solution || '',
-                  negativeMarks: q.negativeMarks !== undefined ? q.negativeMarks : (isInteger ? 0 : undefined),
-                  isInteger: isInteger
+                  negativeMarks: q.negativeMarks !== undefined ? q.negativeMarks : (optionsArray.length === 0 ? 0 : undefined),
+                  isInteger: optionsArray.length === 0,
+                  shift: q.shift || ''
                 };
               });
               setStagedQuestions(processed);
@@ -151,24 +150,58 @@ const UploadQuestions = () => {
   };
 
   const handleImageUpload = async (e, qIndex, optIndex = null) => {
-    const file = e.target.files[0];
-    if (!file) return;
+    const files = Array.from(e.target.files);
+    if (files.length === 0) return;
 
     try {
-      const url = await uploadImage(file);
       const newQ = [...stagedQuestions];
-      if (optIndex === null) {
-        newQ[qIndex] = { ...newQ[qIndex], imageUrl: url };
+      if (optIndex === null || optIndex === 'explanation') {
+        const urls = await Promise.all(files.map(f => uploadImage(f)));
+        if (optIndex === null) {
+          const currentUrls = newQ[qIndex].imageUrls || (newQ[qIndex].imageUrl ? [newQ[qIndex].imageUrl] : []);
+          newQ[qIndex] = { ...newQ[qIndex], imageUrls: [...currentUrls, ...urls] };
+        } else if (optIndex === 'explanation') {
+          const currentUrls = newQ[qIndex].solutionImageUrls || (newQ[qIndex].solutionImageUrl ? [newQ[qIndex].solutionImageUrl] : []);
+          newQ[qIndex] = { ...newQ[qIndex], solutionImageUrls: [...currentUrls, ...urls] };
+        }
       } else {
+        const url = await uploadImage(files[0]);
         const optionImages = [...(newQ[qIndex].optionImages || ["", "", "", ""])];
         optionImages[optIndex] = url;
         newQ[qIndex] = { ...newQ[qIndex], optionImages };
       }
       setStagedQuestions(newQ);
     } catch (err) {
-      alert("Failed to upload image.");
+      console.error(err);
+      alert("Failed to upload image(s): " + err.message);
     } finally {
       e.target.value = null;
+    }
+  };
+
+  const handleFixSolution = async (idx) => {
+    const hint = window.prompt("What is wrong with this solution? Give a hint to the AI:");
+    if (!hint) return;
+
+    setFixingIdx(idx);
+    try {
+      const q = stagedQuestions[idx];
+      const newSolution = await fixSolution({
+        question: q.text || '',
+        options: q.options || [],
+        correctAnswer: String(q.correctAnswer || ''),
+        currentExplanation: q.explanation || '',
+        hint: hint
+      });
+      
+      const newQ = [...stagedQuestions];
+      newQ[idx] = { ...newQ[idx], explanation: newSolution };
+      setStagedQuestions(newQ);
+    } catch (error) {
+      console.error(error);
+      alert("Failed to fix solution: " + error.message);
+    } finally {
+      setFixingIdx(null);
     }
   };
 
@@ -194,8 +227,11 @@ const UploadQuestions = () => {
           negativeMarks: q.negativeMarks !== undefined ? q.negativeMarks : ((!q.options || q.options.length === 0) ? 0 : negativeMarks),
           date: q.date || '',
           shift: q.shift || '',
-          imageUrl: q.imageUrl || '',
-          optionImages: q.optionImages || []
+          imageUrl: q.imageUrls && q.imageUrls.length > 0 ? q.imageUrls[0] : (q.imageUrl || ''),
+          imageUrls: q.imageUrls || (q.imageUrl ? [q.imageUrl] : []),
+          optionImages: q.optionImages || [],
+          solutionImageUrl: q.solutionImageUrls && q.solutionImageUrls.length > 0 ? q.solutionImageUrls[0] : (q.solutionImageUrl || ''),
+          solutionImageUrls: q.solutionImageUrls || (q.solutionImageUrl ? [q.solutionImageUrl] : [])
         });
       }
       alert("All extracted questions saved successfully!");
@@ -371,22 +407,24 @@ const UploadQuestions = () => {
                     <label className="form-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <span>Question Graphic (Optional)</span>
                       <span style={{ fontSize: '0.875rem', fontWeight: '500', color: 'var(--color-primary)', cursor: 'pointer', backgroundColor: 'var(--color-primary-light)', padding: '0.25rem 0.75rem', borderRadius: '1rem' }}>
-                        <input type="file" accept="image/*" id={`q-img-${idx}`} style={{ display: 'none' }} onChange={e => handleImageUpload(e, idx)} />
-                        <label htmlFor={`q-img-${idx}`} style={{ cursor: 'pointer' }}>+ Upload Image</label>
+                        <input type="file" multiple accept="image/*" id={`q-img-${idx}`} style={{ display: 'none' }} onChange={e => handleImageUpload(e, idx)} />
+                        <label htmlFor={`q-img-${idx}`} style={{ cursor: 'pointer' }}>+ Upload Image(s)</label>
                       </span>
                     </label>
-                    {q.imageUrl && (
-                      <div style={{ marginTop: '1rem', padding: '1rem', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', display: 'inline-block' }}>
-                        <img src={q.imageUrl} alt="Graphic" style={{ maxWidth: '100%', maxHeight: '250px', borderRadius: 'var(--radius-sm)' }} />
+                    {(q.imageUrls || (q.imageUrl ? [q.imageUrl] : [])).map((imgUrl, imgIdx) => (
+                      <div key={imgIdx} style={{ marginTop: '1rem', padding: '1rem', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', display: 'inline-block', marginRight: '1rem' }}>
+                        <img src={imgUrl} alt="Graphic" style={{ maxWidth: '100%', maxHeight: '250px', borderRadius: 'var(--radius-sm)' }} />
                         <div style={{ marginTop: '0.5rem' }}>
-                          <button className="btn-outline" style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem', color: 'var(--color-danger)', borderColor: 'var(--color-danger-light)' }} onClick={() => {
+                          <button className="btn-outline" style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem', color: 'var(--color-danger)', borderColor: 'var(--color-danger-light)' }} onClick={(e) => {
+                            e.preventDefault();
                             const newQ = [...stagedQuestions];
-                            newQ[idx] = { ...newQ[idx], imageUrl: '' };
+                            const currentUrls = newQ[idx].imageUrls || (newQ[idx].imageUrl ? [newQ[idx].imageUrl] : []);
+                            newQ[idx] = { ...newQ[idx], imageUrls: currentUrls.filter((_, i) => i !== imgIdx), imageUrl: currentUrls.filter((_, i) => i !== imgIdx)[0] || '' };
                             setStagedQuestions(newQ);
-                          }}>Remove Image</button>
+                          }}>Remove</button>
                         </div>
                       </div>
-                    )}
+                    ))}
                   </div>
 
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '1.5rem', marginBottom: '2rem', padding: '1.5rem', backgroundColor: '#f8fafc', borderRadius: 'var(--radius-lg)' }}>
@@ -452,15 +490,45 @@ const UploadQuestions = () => {
                   </div>
 
                   <div className="form-group" style={{ marginBottom: '2rem' }}>
-                    <label className="form-label" style={{ fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                      <Sparkles size={18} style={{ color: 'var(--color-warning)' }} />
-                      Detailed Solution / Explanation
+                    <label className="form-label" style={{ fontSize: '1.1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <Sparkles size={18} style={{ color: 'var(--color-warning)' }} />
+                        Detailed Solution / Explanation
+                      </span>
+                      <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                        <button 
+                          className="btn-outline" 
+                          disabled={fixingIdx === idx}
+                          onClick={() => handleFixSolution(idx)}
+                          style={{ fontSize: '0.875rem', fontWeight: '500', color: 'var(--color-warning)', borderColor: 'var(--color-warning)', padding: '0.25rem 0.75rem', borderRadius: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          {fixingIdx === idx ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
+                          AI Correct
+                        </button>
+                        <span style={{ fontSize: '0.875rem', fontWeight: '500', color: 'var(--color-primary)', cursor: 'pointer', backgroundColor: 'var(--color-primary-light)', padding: '0.25rem 0.75rem', borderRadius: '1rem' }}>
+                          <input type="file" multiple accept="image/*" id={`sol-img-${idx}`} style={{ display: 'none' }} onChange={e => handleImageUpload(e, idx, 'explanation')} />
+                          <label htmlFor={`sol-img-${idx}`} style={{ cursor: 'pointer' }}>+ Upload Image(s)</label>
+                        </span>
+                      </div>
                     </label>
                     <textarea className="form-control" rows="5" value={q.explanation || ''} style={{ fontSize: '1rem', padding: '1rem', borderColor: 'var(--color-warning)' }} onChange={e => {
                       const newQ = [...stagedQuestions];
                       newQ[idx] = { ...newQ[idx], explanation: e.target.value };
                       setStagedQuestions(newQ);
                     }} />
+                    {(q.solutionImageUrls || (q.solutionImageUrl ? [q.solutionImageUrl] : [])).map((imgUrl, imgIdx) => (
+                      <div key={imgIdx} style={{ marginTop: '1rem', padding: '1rem', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', display: 'inline-block', marginRight: '1rem' }}>
+                        <img src={imgUrl} alt="Solution Graphic" style={{ maxWidth: '100%', maxHeight: '250px', borderRadius: 'var(--radius-sm)' }} />
+                        <div style={{ marginTop: '0.5rem' }}>
+                          <button className="btn-outline" style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem', color: 'var(--color-danger)', borderColor: 'var(--color-danger-light)' }} onClick={(e) => {
+                            e.preventDefault();
+                            const newQ = [...stagedQuestions];
+                            const currentUrls = newQ[idx].solutionImageUrls || (newQ[idx].solutionImageUrl ? [newQ[idx].solutionImageUrl] : []);
+                            newQ[idx] = { ...newQ[idx], solutionImageUrls: currentUrls.filter((_, i) => i !== imgIdx), solutionImageUrl: currentUrls.filter((_, i) => i !== imgIdx)[0] || '' };
+                            setStagedQuestions(newQ);
+                          }}>Remove</button>
+                        </div>
+                      </div>
+                    ))}
                     {q.explanation && (
                       <div style={{ marginTop: '0.75rem', fontSize: '1rem', padding: '1rem', backgroundColor: '#fffbeb', borderRadius: 'var(--radius-md)', border: '1px solid #fde68a' }}>
                         <strong style={{ color: 'var(--color-warning)' }}>Preview:</strong> <div style={{ marginTop: '0.5rem' }}><Latex>{q.explanation}</Latex></div>
