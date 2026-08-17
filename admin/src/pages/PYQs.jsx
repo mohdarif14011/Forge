@@ -53,7 +53,10 @@ const PYQs = () => {
     marks: 4,
     negativeMarks: -1,
     imageUrl: '',
-    optionImages: []
+    imageUrls: [],
+    optionImages: [],
+    solutionImageUrl: '',
+    solutionImageUrls: []
   });
 
   useEffect(() => {
@@ -115,7 +118,10 @@ const PYQs = () => {
         marks: q.marks || 4,
         negativeMarks: q.negativeMarks || -1,
         imageUrl: q.imageUrl || '',
-        optionImages: q.optionImages || []
+        imageUrls: q.imageUrls || (q.imageUrl ? [q.imageUrl] : []),
+        optionImages: q.optionImages || [],
+        solutionImageUrl: q.solutionImageUrl || '',
+        solutionImageUrls: q.solutionImageUrls || (q.solutionImageUrl ? [q.solutionImageUrl] : [])
       });
     } else {
       setEditingId(null);
@@ -130,7 +136,10 @@ const PYQs = () => {
         marks: 4,
         negativeMarks: -1,
         imageUrl: '',
-        optionImages: []
+        imageUrls: [],
+        optionImages: [],
+        solutionImageUrl: '',
+        solutionImageUrls: []
       });
     }
     setIsModalOpen(true);
@@ -142,19 +151,31 @@ const PYQs = () => {
   };
 
   const handleImageUpload = async (e, optIndex = null) => {
-    const file = e.target.files[0];
-    if (!file) return;
+    const files = Array.from(e.target.files);
+    if (files.length === 0) return;
     try {
-      const url = await uploadImage(file);
-      if (optIndex === null) {
-        setFormData(prev => ({ ...prev, imageUrl: url }));
+      if (optIndex === null || optIndex === 'explanation') {
+        const urls = await Promise.all(files.map(f => uploadImage(f)));
+        if (optIndex === null) {
+          setFormData(prev => ({ 
+            ...prev, 
+            imageUrls: [...(prev.imageUrls || []), ...urls],
+          }));
+        } else if (optIndex === 'explanation') {
+          setFormData(prev => ({ 
+            ...prev, 
+            solutionImageUrls: [...(prev.solutionImageUrls || []), ...urls],
+          }));
+        }
       } else {
+        const url = await uploadImage(files[0]);
         const optionImages = [...(formData.optionImages || ["","","",""])];
         optionImages[optIndex] = url;
         setFormData(prev => ({ ...prev, optionImages }));
       }
     } catch (err) {
-      alert("Failed to upload image.");
+      console.error(err);
+      alert("Failed to upload image(s): " + err.message);
     } finally {
       e.target.value = null;
     }
@@ -165,6 +186,8 @@ const PYQs = () => {
     try {
       const payload = {
         ...formData,
+        imageUrl: formData.imageUrls && formData.imageUrls.length > 0 ? formData.imageUrls[0] : (formData.imageUrl || ''),
+        solutionImageUrl: formData.solutionImageUrls && formData.solutionImageUrls.length > 0 ? formData.solutionImageUrls[0] : (formData.solutionImageUrl || ''),
         type: 'pyq',
         examId: selectedExam.id,
         examName: selectedExam.name,
@@ -328,9 +351,9 @@ const PYQs = () => {
                           
                           <p style={{ fontWeight: 500, marginBottom: '1rem' }}><Latex>{q.text || ''}</Latex></p>
                           
-                          {q.imageUrl && (
-                            <img src={q.imageUrl} alt="Question Graphic" style={{ maxHeight: '150px', marginBottom: '1rem', borderRadius: '4px' }} />
-                          )}
+                          {(q.imageUrls || (q.imageUrl ? [q.imageUrl] : [])).map((imgUrl, imgIdx) => (
+                            <img key={imgIdx} src={imgUrl} alt="Question Graphic" style={{ maxHeight: '150px', marginBottom: '1rem', borderRadius: '4px', marginRight: '1rem' }} />
+                          ))}
 
                           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.5rem', marginBottom: '1rem' }}>
                             {(q.options || []).map((opt, oIdx) => (
@@ -352,8 +375,19 @@ const PYQs = () => {
                             ))}
                           </div>
 
-                          <div style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)' }}>
+                          {q.explanation && (
+                            <div style={{ marginTop: '1rem', borderTop: '1px dashed var(--color-border-light)', paddingTop: '1rem', marginBottom: '1rem' }}>
+                              <strong style={{ color: 'var(--color-primary)' }}>Solution / Explanation:</strong>
+                              <div style={{ marginTop: '0.5rem', fontSize: '0.925rem', lineHeight: '1.5' }}>
+                                <Latex>{q.explanation}</Latex>
+                              </div>
+                              {(q.solutionImageUrls || (q.solutionImageUrl ? [q.solutionImageUrl] : [])).map((imgUrl, imgIdx) => (
+                                <img key={imgIdx} src={imgUrl} alt="Solution Graphic" style={{ maxHeight: '150px', marginTop: '0.75rem', borderRadius: '4px', display: 'inline-block', marginRight: '1rem' }} />
+                              ))}
+                            </div>
+                          )}
 
+                          <div style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)' }}>
                             {q.date && <span style={{ marginRight: '1rem' }}><strong>Date:</strong> {q.date}</span>}
                             {q.shift && <span><strong>Shift:</strong> {q.shift}</span>}
                           </div>
@@ -390,18 +424,22 @@ const PYQs = () => {
                 <label className="form-label" style={{ display: 'flex', justifyContent: 'space-between' }}>
                   Question Image 
                   <span style={{ fontSize: '0.75rem', fontWeight: 'normal', color: 'var(--color-primary)', cursor: 'pointer' }}>
-                    <input type="file" accept="image/*" id="q-img-edit" style={{ display: 'none' }} onChange={e => handleImageUpload(e)} />
-                    <label htmlFor="q-img-edit" style={{ cursor: 'pointer' }}>Upload/Change Image</label>
+                    <input type="file" multiple accept="image/*" id="q-img-edit" style={{ display: 'none' }} onChange={e => handleImageUpload(e)} />
+                    <label htmlFor="q-img-edit" style={{ cursor: 'pointer' }}>Upload Image(s)</label>
                   </span>
                 </label>
-                {formData.imageUrl && (
-                  <div>
-                    <img src={formData.imageUrl} alt="Extracted graphic" style={{ maxWidth: '100%', maxHeight: '200px', borderRadius: 'var(--radius-sm)' }} />
-                    <button className="btn-outline" style={{ marginTop: '0.5rem', padding: '0.25rem 0.5rem', fontSize: '0.75rem', color: 'var(--color-danger)', borderColor: 'var(--color-danger-light)' }} onClick={() => {
-                      setFormData(prev => ({...prev, imageUrl: ''}));
-                    }}>Remove Image</button>
+                {(formData.imageUrls || []).map((imgUrl, imgIdx) => (
+                  <div key={imgIdx} style={{ display: 'inline-block', marginRight: '1rem', marginBottom: '1rem' }}>
+                    <img src={imgUrl} alt="Extracted graphic" style={{ maxWidth: '100%', maxHeight: '200px', borderRadius: 'var(--radius-sm)' }} />
+                    <button className="btn-outline" style={{ display: 'block', marginTop: '0.5rem', padding: '0.25rem 0.5rem', fontSize: '0.75rem', color: 'var(--color-danger)', borderColor: 'var(--color-danger-light)' }} onClick={(e) => {
+                      e.preventDefault();
+                      setFormData(prev => {
+                        const newUrls = prev.imageUrls.filter((_, i) => i !== imgIdx);
+                        return {...prev, imageUrls: newUrls, imageUrl: newUrls.length > 0 ? newUrls[0] : ''};
+                      });
+                    }}>Remove</button>
                   </div>
-                )}
+                ))}
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
@@ -476,8 +514,31 @@ const PYQs = () => {
               </div>
 
               <div className="form-group" style={{ marginBottom: 0 }}>
-                <label className="form-label">Explanation</label>
+                <label className="form-label" style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  Explanation (Supports LaTeX with $...$)
+                  <span style={{ fontSize: '0.75rem', fontWeight: 'normal', color: 'var(--color-primary)', cursor: 'pointer' }}>
+                    <input type="file" multiple accept="image/*" id="sol-img-edit" style={{ display: 'none' }} onChange={e => handleImageUpload(e, 'explanation')} />
+                    <label htmlFor="sol-img-edit" style={{ cursor: 'pointer' }}>Upload Image(s)</label>
+                  </span>
+                </label>
                 <textarea className="form-control" rows="3" value={formData.explanation} onChange={e => setFormData({...formData, explanation: e.target.value})}></textarea>
+                {(formData.solutionImageUrls || []).map((imgUrl, imgIdx) => (
+                  <div key={imgIdx} style={{ display: 'inline-block', marginRight: '1rem', marginTop: '0.5rem' }}>
+                    <img src={imgUrl} alt="Solution graphic" style={{ maxWidth: '100%', maxHeight: '200px', borderRadius: 'var(--radius-sm)' }} />
+                    <div>
+                      <button className="btn-outline" style={{ marginTop: '0.5rem', padding: '0.25rem 0.5rem', fontSize: '0.75rem', color: 'var(--color-danger)', borderColor: 'var(--color-danger-light)' }} onClick={(e) => {
+                        e.preventDefault();
+                        setFormData(prev => {
+                          const newUrls = prev.solutionImageUrls.filter((_, i) => i !== imgIdx);
+                          return {...prev, solutionImageUrls: newUrls, solutionImageUrl: newUrls.length > 0 ? newUrls[0] : ''};
+                        });
+                      }}>Remove</button>
+                    </div>
+                  </div>
+                ))}
+                <div style={{ marginTop: '0.5rem', padding: '0.5rem', background: 'var(--color-background-soft)', borderRadius: '4px', fontSize: '0.875rem' }}>
+                  <Latex>{formData.explanation}</Latex>
+                </div>
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginTop: '1rem' }}>

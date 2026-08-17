@@ -12,7 +12,6 @@ const Exams = () => {
   const [name, setName] = useState('');
   const [logo, setLogo] = useState('');
   const [years, setYears] = useState('');
-  const [shifts, setShifts] = useState('');
   
   // Dynamic Subjects & Chapters
   const [subjects, setSubjects] = useState([{ name: '', chapters: '' }]);
@@ -49,7 +48,6 @@ const Exams = () => {
     
     // Parse the lists
     const parsedYears = years.split(',').map(y => y.trim()).filter(Boolean);
-    const parsedShifts = shifts.split(',').map(s => s.trim()).filter(Boolean);
     const parsedSubjects = subjects.map(sub => ({
       name: sub.name.trim(),
       chapters: sub.chapters.split(',').map(c => c.trim()).filter(Boolean)
@@ -61,7 +59,6 @@ const Exams = () => {
           name,
           logo,
           years: parsedYears,
-          shifts: parsedShifts,
           subjects: parsedSubjects
         });
       } else {
@@ -69,7 +66,6 @@ const Exams = () => {
           name,
           logo,
           years: parsedYears,
-          shifts: parsedShifts,
           subjects: parsedSubjects
         });
       }
@@ -89,7 +85,6 @@ const Exams = () => {
     setName('');
     setLogo('');
     setYears('');
-    setShifts('');
     setSubjects([{ name: '', chapters: '' }]);
   };
 
@@ -98,7 +93,6 @@ const Exams = () => {
     setName(exam.name || '');
     setLogo(exam.logo || '');
     setYears(exam.years?.join(', ') || '');
-    setShifts(exam.shifts?.join(', ') || '');
     if (exam.subjects && exam.subjects.length > 0) {
       setSubjects(exam.subjects.map(s => ({
         name: s.name,
@@ -153,15 +147,9 @@ const Exams = () => {
               <input type="text" className="form-control" placeholder="e.g. JM or https://..." value={logo} onChange={(e) => setLogo(e.target.value)} />
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.5rem' }}>
-              <div className="form-group" style={{ marginBottom: 0 }}>
-                <label className="form-label">Available Years (comma separated)</label>
-                <input type="text" className="form-control" placeholder="2024, 2023, 2022" value={years} onChange={(e) => setYears(e.target.value)} />
-              </div>
-              <div className="form-group" style={{ marginBottom: 0 }}>
-                <label className="form-label">Available Shifts (comma separated)</label>
-                <input type="text" className="form-control" placeholder="Morning Shift, Evening Shift" value={shifts} onChange={(e) => setShifts(e.target.value)} />
-              </div>
+            <div className="form-group">
+              <label className="form-label">Available Years (comma separated)</label>
+              <input type="text" className="form-control" placeholder="2024, 2023, 2022" value={years} onChange={(e) => setYears(e.target.value)} />
             </div>
 
             <div style={{ borderTop: '1px solid var(--color-border-light)', margin: '2rem 0', paddingTop: '1.5rem' }}>
@@ -226,9 +214,8 @@ const Exams = () => {
                     </div>
                   </div>
                   
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', fontSize: '0.875rem' }}>
-                    <div><strong>Years:</strong> {exam.years?.join(', ') || 'N/A'}</div>
-                    <div><strong>Shifts:</strong> {exam.shifts?.join(', ') || 'N/A'}</div>
+                  <div style={{ fontSize: '0.875rem' }}>
+                    <strong>Years:</strong> {exam.years?.join(', ') || 'N/A'}
                   </div>
                   
                   <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px dashed var(--color-border)' }}>

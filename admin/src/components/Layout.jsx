@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { 
@@ -15,12 +16,15 @@ import {
   GraduationCap,
   Settings,
   Bell,
-  LifeBuoy
+  LifeBuoy,
+  Menu,
+  ChevronLeft
 } from 'lucide-react';
 
 const Layout = () => {
   const { logout } = useAuth();
   const navigate = useNavigate();
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
   const handleLogout = async () => {
     try {
@@ -50,33 +54,60 @@ const Layout = () => {
     <div className="app-container">
       {/* Sidebar */}
       <aside style={{
-        width: '280px',
+        width: isSidebarOpen ? '280px' : '80px',
         backgroundColor: 'var(--color-surface)',
         borderRight: '1px solid var(--color-border)',
         display: 'flex',
         flexDirection: 'column',
         boxShadow: 'var(--shadow-sm)',
-        zIndex: 10
+        zIndex: 10,
+        transition: 'width 0.3s ease'
       }}>
         {/* Logo Area */}
         <div style={{
-          padding: '2rem 1.5rem',
+          padding: isSidebarOpen ? '2rem 1.5rem' : '2rem 0',
           display: 'flex',
           alignItems: 'center',
-          gap: '0.75rem',
+          justifyContent: isSidebarOpen ? 'space-between' : 'center',
+          flexDirection: isSidebarOpen ? 'row' : 'column',
+          gap: '1rem',
           borderBottom: '1px solid var(--color-border-light)'
         }}>
-          <div style={{
-            backgroundColor: 'var(--color-primary-light)',
-            color: 'var(--color-primary)',
-            padding: '0.5rem',
-            borderRadius: 'var(--radius-md)'
-          }}>
-            <GraduationCap size={28} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <div style={{
+              backgroundColor: 'var(--color-primary-light)',
+              color: 'var(--color-primary)',
+              padding: '0.5rem',
+              borderRadius: 'var(--radius-md)',
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'center'
+            }}>
+              <GraduationCap size={28} style={{ minWidth: '28px' }} />
+            </div>
+            {isSidebarOpen && (
+              <h2 style={{ fontSize: '1.25rem', margin: 0, color: 'var(--color-secondary)', whiteSpace: 'nowrap' }}>
+                Admin Panel
+              </h2>
+            )}
           </div>
-          <h2 style={{ fontSize: '1.25rem', margin: 0, color: 'var(--color-secondary)' }}>
-            Admin Panel
-          </h2>
+          <button 
+            onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+            style={{
+              background: 'var(--color-surface)',
+              border: '1px solid var(--color-border)',
+              cursor: 'pointer',
+              color: 'var(--color-text-muted)',
+              display: 'flex',
+              padding: '0.25rem',
+              borderRadius: '50%',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}
+            title={isSidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
+          >
+            {isSidebarOpen ? <ChevronLeft size={20} /> : <Menu size={20} />}
+          </button>
         </div>
 
         {/* Navigation */}
@@ -94,11 +125,13 @@ const Layout = () => {
               <NavLink
                 key={item.name}
                 to={item.path}
+                title={!isSidebarOpen ? item.name : ""}
                 style={({ isActive }) => ({
                   display: 'flex',
                   alignItems: 'center',
                   gap: '0.75rem',
-                  padding: '0.875rem 1rem',
+                  padding: isSidebarOpen ? '0.875rem 1rem' : '0.875rem 0',
+                  justifyContent: isSidebarOpen ? 'flex-start' : 'center',
                   borderRadius: 'var(--radius-md)',
                   color: isActive ? 'var(--color-primary)' : 'var(--color-text-muted)',
                   backgroundColor: isActive ? 'var(--color-primary-light)' : 'transparent',
@@ -107,8 +140,8 @@ const Layout = () => {
                 })}
                 className="sidebar-link"
               >
-                <Icon size={20} />
-                {item.name}
+                <Icon size={20} style={{ minWidth: '20px' }} />
+                {isSidebarOpen && <span style={{ whiteSpace: 'nowrap' }}>{item.name}</span>}
               </NavLink>
             );
           })}
@@ -121,20 +154,23 @@ const Layout = () => {
             display: 'flex',
             alignItems: 'center',
             gap: '0.75rem',
-            padding: '0.875rem 1rem',
+            padding: isSidebarOpen ? '0.875rem 1rem' : '0.875rem 0',
+            justifyContent: isSidebarOpen ? 'flex-start' : 'center',
             borderRadius: 'var(--radius-md)',
             color: 'var(--color-danger)',
             fontWeight: 500,
             transition: 'all var(--transition-fast)',
             cursor: 'pointer',
-            backgroundColor: 'transparent'
+            backgroundColor: 'transparent',
+            border: 'none'
           }}
+          title={!isSidebarOpen ? "Logout" : ""}
           onClick={handleLogout}
           onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--color-danger-light)'}
           onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
           >
-            <LogOut size={20} />
-            Logout
+            <LogOut size={20} style={{ minWidth: '20px' }} />
+            {isSidebarOpen && <span>Logout</span>}
           </button>
         </div>
       </aside>
